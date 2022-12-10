@@ -63,6 +63,25 @@ fn main() {
 
     let solution_1: i32 = (0..=220).skip(20).step_by(40).map(|i| vm.signal_strength_at(i)).sum();
     println!("{}", solution_1);
+
+    println!("{}", crt_render(&vm.register_history));
+}
+
+fn crt_render(register_history: &Vec<i32>) -> String {
+    register_history[0..register_history.len()-1].iter().skip(1).enumerate().map(|(i, sprite_pos)| {
+        let line_pos: i32 = (i % 40) as i32;
+        let symbol = if (line_pos - sprite_pos).abs() <= 1 {
+            "#"
+        } else {
+            "."
+        }.to_string();
+
+        if line_pos == 39 {
+            symbol + "\n"
+        } else {
+            symbol
+        }
+    }).fold("".to_string(), |acc, x| acc.clone() + &x)
 }
 
 #[cfg(test)]
@@ -268,5 +287,25 @@ noop"
         assert_eq!(vm.signal_strength_at(220), 3960);
 
         assert_eq!((0..=220).skip(20).step_by(40).map(|i| vm.signal_strength_at(i)).sum::<i32>(), 13140);
+    }
+
+    #[test]
+    fn test_crt() {
+        let expected: &str = "##..##..##..##..##..##..##..##..##..##..
+###...###...###...###...###...###...###.
+####....####....####....####....####....
+#####.....#####.....#####.....#####.....
+######......######......######......####
+#######.......#######.......#######.....
+";
+
+        let mut vm = VM::new();
+        for line in sample().lines() {
+            vm.run(&VM::parse_command(line));
+        }
+        println!("{:?}", vm);
+
+        let res = crt_render(&vm.register_history);
+        assert_eq!(res, expected);
     }
 }
