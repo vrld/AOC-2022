@@ -6,8 +6,7 @@ type Point = (i32, i32);
 
 #[derive(Debug)]
 struct Rope {
-    pos_head: Point,
-    pos_tail: Point,
+    knots: Vec<Point>,
     tail_visited: HashSet<Point>,
 }
 
@@ -19,30 +18,49 @@ enum Direction {
 }
 
 impl Rope {
-    fn new() -> Rope {
+    fn new(capacity: usize) -> Rope {
+        assert!(capacity >= 2, "must have at least 2 knots");
         Rope {
-            pos_head: (0,0),
-            pos_tail: (0,0),
+            knots: vec![(0,0); capacity],
             tail_visited: HashSet::new(),
         }
     }
 
     fn mov(&mut self, d: &Direction) {
-        let delta = match d {
-            Direction::Up => (0, 1),
-            Direction::Right => (1, 0),
-            Direction::Down => (0, -1),
-            Direction::Left => (-1, 0),
+        let head = self.head();
+        self.knots[0] = match d {
+            Direction::Up => (head.0, head.1 + 1),
+            Direction::Right => (head.0 + 1, head.1),
+            Direction::Down => (head.0, head.1 - 1),
+            Direction::Left => (head.0 - 1, head.1),
         };
 
-        self.pos_head = (self.pos_head.0 + delta.0, self.pos_head.1 + delta.1);
-
-        let (dx, dy) = (self.pos_head.0 - self.pos_tail.0, self.pos_head.1 - self.pos_tail.1);
-        if dx.abs() > 1 || dy.abs() > 1 {
-            self.pos_tail = (self.pos_tail.0 + min(1, max(-1, dx)), self.pos_tail.1 + min(1, max(-1, dy)))
+        for lead in 0..self.knots.len()-1 {
+            self._follow_knot(lead);
         }
 
-        self.tail_visited.insert(self.pos_tail);
+        self.tail_visited.insert(self.tail());
+    }
+
+    fn head(&self) -> Point {
+        *self.knots.first().expect("must have at least 2 knots")
+    }
+
+    fn tail(&self) -> Point {
+        *self.knots.last().expect("must have at least 2 knots")
+    }
+
+    fn _follow_knot(&mut self, lead: usize) {
+        let follow = lead + 1;
+        assert!(follow < self.knots.len());
+
+        let knot_lead = self.knots[lead];
+        let knot_follow = self.knots[follow];
+
+        let (dx, dy) = (knot_lead.0 - knot_follow.0, knot_lead.1 - knot_follow.1);
+        if dx.abs() > 1 || dy.abs() > 1 {
+            self.knots[follow] = (knot_follow.0 + min(1, max(-1, dx)), knot_follow.1 + min(1, max(-1, dy)))
+        }
     }
 
     fn command(&mut self, cmd: &str) {
@@ -64,7 +82,7 @@ impl Rope {
 }
 
 fn main() {
-    let mut rope = Rope::new();
+    let mut rope = Rope::new(2);
     let input_path = env::args().skip(1).next().expect("give input file");
     for line in fs::read_to_string(input_path).expect("cannot read input").lines() {
         rope.command(line);
@@ -87,6 +105,17 @@ L 5
 R 2"
     }
 
+    fn sample2() -> &'static str {
+        "R 5
+U 8
+L 8
+D 3
+R 17
+D 10
+L 25
+U 20"
+    }
+
     #[test]
     fn test_mov() {
         /*
@@ -96,45 +125,45 @@ R 2"
          * H...  T... .... .... .... .... ....
          *
          */
-        let mut r = Rope::new();
-        assert_eq!(r.pos_head, (0, 0));
-        assert_eq!(r.pos_tail, (0, 0));
+        let mut r = Rope::new(2);
+        assert_eq!(r.head(), (0, 0));
+        assert_eq!(r.tail(), (0, 0));
 
-        r.mov(Direction::Up);
-        assert_eq!(r.pos_head, (0, 1));
-        assert_eq!(r.pos_tail, (0, 0));
+        r.mov(&Direction::Up);
+        assert_eq!(r.head(), (0, 1));
+        assert_eq!(r.tail(), (0, 0));
 
-        r.mov(Direction::Up);
-        assert_eq!(r.pos_head, (0, 2));
-        assert_eq!(r.pos_tail, (0, 1));
+        r.mov(&Direction::Up);
+        assert_eq!(r.head(), (0, 2));
+        assert_eq!(r.tail(), (0, 1));
 
-        r.mov(Direction::Right);
-        assert_eq!(r.pos_head, (1, 2));
-        assert_eq!(r.pos_tail, (0, 1));
+        r.mov(&Direction::Right);
+        assert_eq!(r.head(), (1, 2));
+        assert_eq!(r.tail(), (0, 1));
 
-        r.mov(Direction::Right);
-        assert_eq!(r.pos_head, (2, 2));
-        assert_eq!(r.pos_tail, (1, 2));
+        r.mov(&Direction::Right);
+        assert_eq!(r.head(), (2, 2));
+        assert_eq!(r.tail(), (1, 2));
 
-        r.mov(Direction::Down);
-        assert_eq!(r.pos_head, (2, 1));
-        assert_eq!(r.pos_tail, (1, 2));
+        r.mov(&Direction::Down);
+        assert_eq!(r.head(), (2, 1));
+        assert_eq!(r.tail(), (1, 2));
 
-        r.mov(Direction::Right);
-        assert_eq!(r.pos_head, (3, 1));
-        assert_eq!(r.pos_tail, (2, 1));
+        r.mov(&Direction::Right);
+        assert_eq!(r.head(), (3, 1));
+        assert_eq!(r.tail(), (2, 1));
 
-        r.mov(Direction::Left);
-        assert_eq!(r.pos_head, (2, 1));
-        assert_eq!(r.pos_tail, (2, 1));
+        r.mov(&Direction::Left);
+        assert_eq!(r.head(), (2, 1));
+        assert_eq!(r.tail(), (2, 1));
 
-        r.mov(Direction::Left);
-        assert_eq!(r.pos_head, (1, 1));
-        assert_eq!(r.pos_tail, (2, 1));
+        r.mov(&Direction::Left);
+        assert_eq!(r.head(), (1, 1));
+        assert_eq!(r.tail(), (2, 1));
 
-        r.mov(Direction::Left);
-        assert_eq!(r.pos_head, (0, 1));
-        assert_eq!(r.pos_tail, (1, 1));
+        r.mov(&Direction::Left);
+        assert_eq!(r.head(), (0, 1));
+        assert_eq!(r.tail(), (1, 1));
 
         assert_eq!(r.tail_visited, HashSet::from([
             (0, 0),
@@ -147,10 +176,28 @@ R 2"
 
     #[test]
     fn test_sample() {
-        let mut r = Rope::new();
+        let mut r = Rope::new(2);
         for line in sample().lines() {
             r.command(line);
         }
         assert_eq!(r.tail_visited.len(), 13);
+    }
+
+    #[test]
+    fn test_sample_part2() {
+        let mut r = Rope::new(10);
+        for line in sample().lines() {
+            r.command(line);
+        }
+        assert_eq!(r.tail_visited.len(), 1);
+    }
+
+    #[test]
+    fn test_sample2_part2() {
+        let mut r = Rope::new(10);
+        for line in sample2().lines() {
+            r.command(line);
+        }
+        assert_eq!(r.tail_visited.len(), 36);
     }
 }
