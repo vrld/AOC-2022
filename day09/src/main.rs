@@ -82,12 +82,17 @@ impl Rope {
 }
 
 fn main() {
-    let mut rope = Rope::new(2);
     let input_path = env::args().skip(1).next().expect("give input file");
-    for line in fs::read_to_string(input_path).expect("cannot read input").lines() {
-        rope.command(line);
+    let content = fs::read_to_string(input_path).expect("cannot read input");
+
+    let mut short_rope = Rope::new(2);
+    let mut long_rope = Rope::new(10);
+    for line in content.lines() {
+        short_rope.command(line);
+        long_rope.command(line);
     }
-    println!("tail visited {} fields", rope.tail_visited.len())
+    println!("short rope: tail visited {} fields", short_rope.tail_visited.len());
+    println!("long rope: tail visited {} fields", long_rope.tail_visited.len());
 }
 
 #[cfg(test)]
