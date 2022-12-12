@@ -88,8 +88,8 @@ impl Monkey {
         s.split_whitespace().skip(3).next().expect("invalid throw to").parse().expect("cannot parse throw to")
     }
 
-    fn inspect(&mut self, worry_level: usize) -> (usize, usize) {
-        let level = do_operation(worry_level, &self.formula) / 3;
+    fn inspect(&mut self, worry_level: usize, relaxation: usize) -> (usize, usize) {
+        let level = do_operation(worry_level, &self.formula) / relaxation;
         let target = if level % self.divisor == 0 {
             self.target_monkey.1
         } else {
@@ -104,14 +104,15 @@ impl Monkey {
     }
 }
 
-fn simulate_round(monkeys: &mut Vec<Monkey>) {
+fn simulate_round(monkeys: &mut Vec<Monkey>, relaxation: usize) {
     let monkey_count: usize = monkeys.len();
+    let modulus = monkeys.iter().map(|m| m.divisor).reduce(|a, b| a * b).unwrap();
     for i in 0..monkey_count {
         while !monkeys[i].items.is_empty() {
             let level_before = monkeys[i].items.pop_front().unwrap();
-            let (target, level) = monkeys[i].inspect(level_before);
+            let (target, level) = monkeys[i].inspect(level_before, relaxation);
             assert!(target < monkey_count);
-            monkeys[target].catch_item(level);
+            monkeys[target].catch_item(level % modulus);
         }
     }
 }
@@ -142,10 +143,15 @@ fn main() {
 
     let mut monkeys: Vec<Monkey> = contents.split("\n\n").map(Monkey::from_str).collect();
     for _ in 0..20 {
-        simulate_round(&mut monkeys);
+        simulate_round(&mut monkeys, 3);
     }
-
     println!("monkey business = {}", monkey_business(&monkeys));
+
+    let mut more_monkeys: Vec<Monkey> = contents.split("\n\n").map(Monkey::from_str).collect();
+    for _ in 0..10000 {
+        simulate_round(&mut more_monkeys, 1);
+    }
+    println!("more monkey business = {}", monkey_business(&more_monkeys));
 }
 
 #[cfg(test)]
@@ -234,7 +240,7 @@ Monkey 3:
     #[test]
     fn test_round() {
         let mut monkeys: Vec<Monkey> = sample().split("\n\n").map(Monkey::from_str).collect();
-        simulate_round(&mut monkeys);
+        simulate_round(&mut monkeys, 3);
         assert_eq!(monkeys[0].items, VecDeque::from([20, 23, 27, 26]));
         assert_eq!(monkeys[1].items, VecDeque::from([2080, 25, 167, 207, 401, 1046]));
         assert_eq!(monkeys[2].items, VecDeque::from([]));
@@ -245,7 +251,7 @@ Monkey 3:
     fn test_20_rounds() {
         let mut monkeys: Vec<Monkey> = sample().split("\n\n").map(Monkey::from_str).collect();
         for _ in 0..20 {
-            simulate_round(&mut monkeys);
+            simulate_round(&mut monkeys, 3);
         }
         assert_eq!(monkeys[0].items, VecDeque::from([10, 12, 14, 26, 34]));
         assert_eq!(monkeys[1].items, VecDeque::from([245, 93, 53, 199, 115]));
@@ -258,6 +264,20 @@ Monkey 3:
         assert_eq!(monkeys[3].items_inspected, 105);
 
         assert_eq!(monkey_business(&monkeys), 10605);
+    }
+
+    #[test]
+    fn test_part2() {
+        let mut monkeys: Vec<Monkey> = sample().split("\n\n").map(Monkey::from_str).collect();
+        for _ in 0..10000 {
+            simulate_round(&mut monkeys, 1);
+        }
+        assert_eq!(monkeys[0].items_inspected, 52166);
+        assert_eq!(monkeys[1].items_inspected, 47830);
+        assert_eq!(monkeys[2].items_inspected, 1938);
+        assert_eq!(monkeys[3].items_inspected, 52013);
+
+        assert_eq!(monkey_business(&monkeys), 2713310158);
     }
 
 }
