@@ -55,6 +55,18 @@ impl Map {
             goal: goal.unwrap(),
         }
     }
+
+    fn possible_starting_points(&self) -> Vec<Point> {
+        let mut res: Vec<Point> = vec![];
+        for i in 0..self.rows {
+            for k in 0..self.cols {
+                if self.map[Self::to_index(i, k, self.cols)] == 0 {
+                    res.push((i, k));
+                }
+            }
+        }
+        res
+    }
 }
 
 impl Index<Point> for Map {
@@ -72,23 +84,21 @@ fn add(p: Point, d: &(i32, i32)) -> Point {
      ((p.1 as i32) + d.1) as usize)
 }
 
-fn a_star(m: &Map) -> Option<Vec<Point>> {
-    let mut open_set: HashSet<Point> = HashSet::from([m.start]);
+fn a_star(m: &Map, start: Point) -> Option<Vec<Point>> {
+    let mut open_set: HashSet<Point> = HashSet::from([start]);
     let mut came_from: HashMap<Point, Point> = HashMap::from([]);
-    let mut g_score: HashMap<Point, u32> = HashMap::from([(m.start, 0)]);
+    let mut g_score: HashMap<Point, u32> = HashMap::from([(start, 0)]);
     let mut f_score: HashMap<Point, u32> = HashMap::from([
-        (m.start, heuristic(&m, &m.start))
+        (start, heuristic(&m, &start))
     ]);
 
     let deltas: Vec<(i32, i32)> = vec![(0, -1), (0,  1), (-1, 0), ( 1, 0)];
 
-    let mut loops = 0;
     while !open_set.is_empty() {
         let current = open_set.iter()
             .map(|n| (n, f_score[n]))
             .min_by(|a, b| a.1.cmp(&b.1))
             .unwrap().0.clone();
-        loops += 1;
 
         if current.0 == m.goal.0 && current.1 == m.goal.1 {
             let mut node = current;
@@ -143,9 +153,17 @@ fn main() {
     let contents = fs::read_to_string(input_path).expect("cannot read");
 
     let map = Map::from_str(&contents);
-    let path = a_star(&map).unwrap();
+    let path = a_star(&map, map.start).unwrap();
 
     println!("Path length: {}", path.len());
+
+    let starting_points = map.possible_starting_points();
+    let shortest_path_len = starting_points.iter()
+        .map(|p| a_star(&map, *p))
+        .filter(|p| p.is_some())
+        .map(|p| p.unwrap().len())
+        .min().unwrap();
+    println!("shortest path length: {:?}", shortest_path_len);
 }
 
 #[cfg(test)]
@@ -207,8 +225,15 @@ abdefghi"
     #[test]
     fn test_search_path() {
         let map = Map::from_str(sample());
-        let path = a_star(&map);
+        let path = a_star(&map, map.start);
         assert_ne!(path, None);
         assert_eq!(path.unwrap().len(), 32);
+    }
+
+    #[test]
+    fn test_starting_points() {
+        let map = Map::from_str(sample());
+        let starting_points = map.possible_starting_points();
+        assert_eq!(starting_points, vec![(0, 0), (0, 1), (1,0), (2,0), (3,0), (4,0)]);
     }
 }
