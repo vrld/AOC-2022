@@ -95,6 +95,52 @@ fn parse_list(chars: &mut Peekable<Chars<'_>>) -> Result<Pkg, ParserError> {
     Ok(Pkg::List(res))
 }
 
+#[derive(Debug, PartialEq)]
+enum PkgOrder {
+    Correct,
+    Undecided,
+    Incorrect,
+}
+
+fn pair_in_right_order((a, b): (&Pkg, &Pkg)) -> PkgOrder {
+    match (a, b) {
+        (Pkg::Num(x), Pkg::Num(y)) => {
+            if x < y {
+                PkgOrder::Correct
+            } else if x > y {
+                PkgOrder::Incorrect
+            } else {
+                PkgOrder::Undecided
+            }
+        },
+        (Pkg::List(first), Pkg::List(second)) => {
+            for (i, x) in first.iter().enumerate() {
+                if let Some(y) = second.get(i) {
+                    match pair_in_right_order((&x, &y)) {
+                        PkgOrder::Undecided => (),
+                        order => return order,
+                    }
+                } else {
+                    // second ran out of items first
+                    return PkgOrder::Incorrect;
+                }
+            }
+            // first ran out of items
+            return PkgOrder::Correct;
+        },
+        (x, Pkg::Num(y)) => pair_in_right_order((x, &Pkg::List(vec![Pkg::Num(*y)]))),
+        (Pkg::Num(x), y) => pair_in_right_order((&Pkg::List(vec![Pkg::Num(*x)]), y)),
+    }
+}
+
+fn sum_indices_in_right_order(pairs: &Vec<(Pkg, Pkg)>) -> usize {
+    pairs.iter()
+        .enumerate()
+        .filter(|(_, p)| pair_in_right_order((&p.0, &p.1)) == PkgOrder::Correct)
+        .map(|(i, _)| i + 1)
+        .sum()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -216,5 +262,25 @@ mod tests {
         assert_eq!(s[7],
                    (Pkg::List(vec![Pkg::Num(1), Pkg::List(vec![Pkg::Num(2), Pkg::List(vec![Pkg::Num(3), Pkg::List(vec![Pkg::Num(4), Pkg::List(vec![Pkg::Num(5), Pkg::Num(6), Pkg::Num(7)])])])]), Pkg::Num(8), Pkg::Num(9)]),
                     Pkg::List(vec![Pkg::Num(1), Pkg::List(vec![Pkg::Num(2), Pkg::List(vec![Pkg::Num(3), Pkg::List(vec![Pkg::Num(4), Pkg::List(vec![Pkg::Num(5), Pkg::Num(6), Pkg::Num(0)])])])]), Pkg::Num(8), Pkg::Num(9)])));
+    }
+
+    #[test]
+    fn test_pair_in_right_order() {
+        let s = parse_pairs(sample()).expect("parsing failed");
+
+        assert_eq!(pair_in_right_order((&s[0].0, &s[0].1)), PkgOrder::Correct);
+        assert_eq!(pair_in_right_order((&s[1].0, &s[1].1)), PkgOrder::Correct);
+        assert_eq!(pair_in_right_order((&s[2].0, &s[2].1)), PkgOrder::Incorrect);
+        assert_eq!(pair_in_right_order((&s[3].0, &s[3].1)), PkgOrder::Correct);
+        assert_eq!(pair_in_right_order((&s[4].0, &s[4].1)), PkgOrder::Incorrect);
+        assert_eq!(pair_in_right_order((&s[5].0, &s[5].1)), PkgOrder::Correct);
+        assert_eq!(pair_in_right_order((&s[6].0, &s[6].1)), PkgOrder::Incorrect);
+        assert_eq!(pair_in_right_order((&s[7].0, &s[7].1)), PkgOrder::Incorrect);
+    }
+
+    #[test]
+    fn test_sum_indices_in_right_order() {
+        let s = parse_pairs(sample()).expect("parsing failed");
+        assert_eq!(sum_indices_in_right_order(&s), 13);
     }
 }
