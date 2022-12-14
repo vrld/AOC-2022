@@ -2,7 +2,12 @@ use std::cmp::{min, max};
 use std::ops::{Index, IndexMut};
 
 fn main() {
-    println!("Hello, world!");
+    let input_path = std::env::args().skip(1).next().expect("no input");
+    let contents = std::fs::read_to_string(input_path).expect("cannot read input");
+    let scan = parse_scan(&contents);
+    let mut cave = Grid::from_scan(&scan);
+
+    println!("this much sand: {}", how_much_is_the_sand(&mut cave));
 }
 
 type Segment = Vec<(i32, i32)>;
