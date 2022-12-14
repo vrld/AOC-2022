@@ -5,9 +5,15 @@ fn main() {
     let input_path = std::env::args().skip(1).next().expect("no input");
     let contents = std::fs::read_to_string(input_path).expect("cannot read input");
     let scan = parse_scan(&contents);
-    let mut cave = Cave::from_scan(&scan);
 
-    println!("this much sand: {}", how_much_is_the_sand(&mut cave));
+    {
+        let mut cave = Cave::from_scan(&scan);
+        println!("this much sand: {}", how_much_is_the_sand(&mut cave));
+    }
+    {
+        let mut cave = Cave::from_scan(&scan);
+        println!("this much time: {}", how_long_until_outlet_blocked(&mut cave));
+    }
 }
 
 type Segment = Vec<(i32, i32)>;
@@ -92,11 +98,41 @@ impl Cave {
         self.items.insert(pos, Cell::Sand);
         true
     }
+
+    fn drop_sand_on_bedrock(&mut self, from: (i32, i32), bedrock: i32) {
+        let mut pos = from;
+        loop {
+            if pos.1 >= bedrock {
+                break
+            }
+
+            pos = if self.items.get(&(pos.0, pos.1 + 1)) == None {
+                (pos.0, pos.1 + 1)
+            } else if self.items.get(&(pos.0 - 1, pos.1 + 1)) == None {
+                (pos.0 - 1, pos.1 + 1)
+            } else if self.items.get(&(pos.0 + 1, pos.1 + 1)) == None {
+                (pos.0 + 1, pos.1 + 1)
+            } else {
+                // Rock and ... sand
+                break
+            }
+        }
+
+        self.items.insert(pos, Cell::Sand);
+    }
 }
 
 fn how_much_is_the_sand(g: &mut Cave) -> usize {
     let abyss = *g.max_y().unwrap_or(&0);
     (0..).take_while(|_| g.drop_sand((500, 0), abyss)).count()
+}
+
+fn how_long_until_outlet_blocked(g: &mut Cave) -> usize {
+    let bedrock = *g.max_y().unwrap_or(&0) + 1;
+    (0..).take_while(|_| {
+        g.drop_sand_on_bedrock((500, 0), bedrock);
+        g.items.get(&(500, 0)) == None
+    }).count() + 1
 }
 
 #[cfg(test)]
@@ -211,5 +247,12 @@ mod tests {
         let scan = parse_scan(sample());
         let mut g = Cave::from_scan(&scan);
         assert_eq!(how_much_is_the_sand(&mut g), 24);
+    }
+
+    #[test]
+    fn test_how_long_until_outlet_blocked() {
+        let scan = parse_scan(sample());
+        let mut g = Cave::from_scan(&scan);
+        assert_eq!(how_long_until_outlet_blocked(&mut g), 93);
     }
 }
