@@ -1,8 +1,14 @@
+use std::{env, fs};
 use std::str::Chars;
 use std::iter::Peekable;
 
 fn main() {
-    println!("Hello, world!");
+    let input_path = env::args().skip(1).next().expect("no input");
+    let contents = fs::read_to_string(input_path).expect("cannot read");
+    let pairs = parse_pairs(&contents).expect("parsing failed");
+
+    println!("sum of indices of pairs in right order: {}", sum_indices_in_right_order(&pairs));
+
 }
 
 #[derive(Debug, PartialEq)]
@@ -125,8 +131,12 @@ fn pair_in_right_order((a, b): (&Pkg, &Pkg)) -> PkgOrder {
                     return PkgOrder::Incorrect;
                 }
             }
-            // first ran out of items
-            return PkgOrder::Correct;
+            if first.len() < second.len() {
+                // first ran out of items
+                return PkgOrder::Correct;
+            } else {
+                return PkgOrder::Undecided;
+            }
         },
         (x, Pkg::Num(y)) => pair_in_right_order((x, &Pkg::List(vec![Pkg::Num(*y)]))),
         (Pkg::Num(x), y) => pair_in_right_order((&Pkg::List(vec![Pkg::Num(*x)]), y)),
