@@ -1,5 +1,6 @@
 use std::{env, fs};
 use std::str::Chars;
+use std::cmp::Ordering;
 use std::iter::Peekable;
 
 fn main() {
@@ -8,7 +9,7 @@ fn main() {
     let pairs = parse_pairs(&contents).expect("parsing failed");
 
     println!("sum of indices of pairs in right order: {}", sum_indices_in_right_order(&pairs));
-
+    println!("decoder_key: {}", decoder_key(&pairs));
 }
 
 #[derive(Debug, PartialEq)]
@@ -149,6 +150,33 @@ fn sum_indices_in_right_order(pairs: &Vec<(Pkg, Pkg)>) -> usize {
         .filter(|(_, p)| pair_in_right_order((&p.0, &p.1)) == PkgOrder::Correct)
         .map(|(i, _)| i + 1)
         .sum()
+}
+
+fn decoder_key(pairs: &Vec<(Pkg, Pkg)>) -> usize {
+    let dividers = (
+        Pkg::List(vec![Pkg::List(vec![Pkg::Num(2)])]),
+        Pkg::List(vec![Pkg::List(vec![Pkg::Num(6)])]),
+    );
+
+    let mut packages: Vec<&Pkg> = vec![&dividers.0, &dividers.1];
+    for (p, q) in pairs {
+        packages.push(p);
+        packages.push(q);
+    }
+    packages.sort_by(|p, q| as_ordering(&pair_in_right_order((p, q))));
+
+    packages.iter().enumerate()
+        .filter(|(_, p)| p == &&&dividers.0 || p == &&&dividers.1)
+        .map(|(i, _)| i + 1)
+        .product()
+}
+
+fn as_ordering(o: &PkgOrder) -> Ordering {
+    match o {
+        PkgOrder::Correct => Ordering::Less,
+        PkgOrder::Undecided => Ordering::Equal,
+        PkgOrder::Incorrect => Ordering::Greater,
+    }
 }
 
 #[cfg(test)]
@@ -292,5 +320,11 @@ mod tests {
     fn test_sum_indices_in_right_order() {
         let s = parse_pairs(sample()).expect("parsing failed");
         assert_eq!(sum_indices_in_right_order(&s), 13);
+    }
+
+    #[test]
+    fn test_decoder_key() {
+        let s = parse_pairs(sample()).expect("parsing failed");
+        assert_eq!(decoder_key(&s), 140);
     }
 }
