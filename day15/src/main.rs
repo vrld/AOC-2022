@@ -1,5 +1,6 @@
 use std::cmp::{min, max};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
+use std::ops::RangeInclusive;
 
 fn main() {
     let input_path = std::env::args().skip(1).next().expect("no input");
@@ -7,6 +8,12 @@ fn main() {
 
     let sensors = parse_sensors(&contents);
     println!("row coverage on row 2000000: {}", row_coverage(&sensors, 2000000));
+
+    let missing_beacons = possible_beacon_positions(&sensors, (0, 4000000), (0, 4000000));
+    println!("Possible beacon positions: {:?}", missing_beacons);
+    for b in missing_beacons {
+        println!("{:?} has tuning frequency {}", b, tuning_frequency(&b))
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -31,35 +38,92 @@ impl Sensor {
             radius: (coords[0] - coords[2]).abs() + (coords[1] - coords[3]).abs()
         }
     }
-
-    fn covers(&self, x: i32, y: i32) -> bool {
-        (self.position.0 - x).abs() + (self.position.1 - y).abs() <= self.radius
-    }
 }
 
 fn parse_sensors(s: &str) -> Vec<Sensor> {
     s.split_terminator("\n").map(Sensor::from_str).collect()
 }
 
-fn get_world_bounds(s: &Vec<Sensor>) -> ((i32, i32), (i32, i32)) {
-    s.iter().fold(
-        ((i32::MAX, i32::MIN), (i32::MAX, i32::MIN)),
-        |bounds, s| {
-            ((min(bounds.0.0, s.position.0 - s.radius),
-              max(bounds.0.1, s.position.0 + s.radius)),
-             (min(bounds.1.0, s.position.1 - s.radius),
-              max(bounds.1.1, s.position.1 + s.radius)))
-        })
+fn row_coverage(sensors: &Vec<Sensor>, y: i32) -> usize {
+    let row_beacon_count  = sensors.iter()
+        .filter(|s| s.closest_beacon.1 == y)
+        .map(|s| s.closest_beacon)
+        .collect::<HashSet<(i32, i32)>>().len();
+
+    world_coverage(&sensors, y, y).get(&y)
+        .unwrap().iter()
+        .map(|r| r.end() - r.start() + 1).sum::<i32>() as usize - row_beacon_count
 }
 
-fn row_coverage(sensors: &Vec<Sensor>, y: i32) -> usize {
-    let row_beacons_x: HashSet<i32> = sensors.iter()
-        .filter(|s| s.closest_beacon.1 == y)
-        .map(|s| s.closest_beacon.0)
-        .collect();
+fn overlaps(a: &RangeInclusive<i32>, b: &RangeInclusive<i32>) -> bool {
+    a.end() >= b.start() && a.start() <= b.end()
+}
 
-    let ((x0, x1), _) = get_world_bounds(&sensors);
-    (x0..=x1).filter(|x| !row_beacons_x.contains(x) && sensors.iter().any(|s| s.covers(*x, y))).count()
+fn merge(a: &RangeInclusive<i32>, b: &RangeInclusive<i32>) -> Result<RangeInclusive<i32>, &'static str> {
+    if overlaps(a, b) || a.end() + 1 == *b.start() {
+        Ok(min(*a.start(), *b.start())..=max(*a.end(), *b.end()))
+    } else {
+        Err("ranges do not overlap")
+    }
+}
+
+type RangeSet = HashSet<RangeInclusive<i32>>;
+type World = HashMap<i32, RangeSet>;
+
+fn insert_row(set: &mut RangeSet, r: &RangeInclusive<i32>) {
+    for q in set.clone().iter() {
+        match merge(q, &r) {
+            Ok(new_range) => {
+                set.remove(q);
+                return insert_row(set, &new_range);
+            },
+            _ => (),
+        }
+    }
+    set.insert(r.clone());
+}
+
+fn fill_rows(rows: &mut World, s: &Sensor, ymin: i32, ymax: i32) {
+    for i in -s.radius..=s.radius {
+        let y = s.position.1 + i;
+        if y < ymin || y > ymax {
+            continue;
+        }
+
+        if !rows.contains_key(&y) {
+            rows.insert(y, HashSet::new());
+        }
+
+        let mut ranges = rows.get_mut(&y).unwrap();
+        let r = s.radius - i.abs();
+        insert_row(&mut ranges, &((s.position.0 - r)..=(s.position.0 + r)));
+    }
+}
+
+fn world_coverage(sensors: &Vec<Sensor>, ymin: i32, ymax: i32) -> World {
+    let mut world: World = HashMap::new();
+    for s in sensors.iter() {
+        fill_rows(&mut world, s, ymin, ymax);
+    }
+    world
+}
+
+fn possible_beacon_positions(sensors: &Vec<Sensor>, (x0, x1): (i32, i32), (y0, y1): (i32, i32)) -> Vec<(i32, i32)> {
+    let world = world_coverage(&sensors, y0, y1);
+    (y0..=y1).map(|y| match world.get(&y) {
+        Some(range_set) => {
+            let mut ranges: Vec<&RangeInclusive<i32>> = range_set.iter().collect();
+            ranges.sort_by(|a, b| a.start().cmp(b.start()));
+            (1..ranges.len())
+                .map(|i| (max(x0, ranges[i-1].end()+1)..min(x1, *ranges[i].start())).map(|x| (x, y)))
+                .flatten().collect::<Vec<(i32, i32)>>()
+        },
+        None => vec![],
+    }).flatten().collect()
+}
+
+fn tuning_frequency((x, y): &(i32, i32)) -> usize {
+    (*x as usize) * 4000000 + (*y as usize)
 }
 
 #[cfg(test)]
@@ -104,22 +168,6 @@ Sensor at x=20, y=1: closest beacon is at x=15, y=3"
     }
 
     #[test]
-    fn test_sensor_covers() {
-        let s = Sensor{
-            position: (42, 23),
-            closest_beacon: (62, 15),
-            radius: 28
-        };
-        assert_eq!(s.covers(42, 23), true);
-        assert_eq!(s.covers(62, 15), true);
-        assert_eq!(s.covers(50, 19), true);
-
-        assert_eq!(s.covers(56, 8), false);
-        assert_eq!(s.covers(666, 23), false);
-        assert_eq!(s.covers(0, 0), false);
-    }
-
-    #[test]
     fn test_parse_sample() {
         let sensors = parse_sensors(sample());
         assert_eq!(sensors, vec![
@@ -144,5 +192,78 @@ Sensor at x=20, y=1: closest beacon is at x=15, y=3"
     fn test_row_coverage() {
         let sensors = parse_sensors(sample());
         assert_eq!(row_coverage(&sensors, 10), 26);
+    }
+
+    #[test]
+    fn test_range_overlaps() {
+        assert_eq!(overlaps(&(0..=10), &(2..=12)), true);
+        assert_eq!(overlaps(&(2..=10), &(0..=4)), true);
+        assert_eq!(overlaps(&(2..=4), &(0..=8)), true);
+        assert_eq!(overlaps(&(2..=4), &(1..=3)), true);
+        assert_eq!(overlaps(&(2..=4), &(1..=2)), true);
+        assert_eq!(overlaps(&(2..=4), &(4..=8)), true);
+        assert_eq!(overlaps(&(2..=4), &(2..=4)), true);
+
+        assert_eq!(overlaps(&(2..=4), &(5..=4)), false);
+        assert_eq!(overlaps(&(9..=10), &(5..=4)), false);
+    }
+
+    #[test]
+    fn test_fill_rows() {
+        let mut w: World = World::new();
+
+        /*   .
+         *  ...
+         * ....B
+         *...S...
+         * .....
+         *  ...
+         *   .
+         */
+        fill_rows(&mut w, &Sensor{
+            position: (0,0),
+            closest_beacon: (2,1),
+            radius: 3
+        }, -5, 5);
+        assert_eq!(w, HashMap::from([
+            (-3, HashSet::from([0..=0])),
+            (-2, HashSet::from([-1..=1])),
+            (-1, HashSet::from([-2..=2])),
+            ( 0, HashSet::from([-3..=3])),
+            ( 1, HashSet::from([-2..=2])),
+            ( 2, HashSet::from([-1..=1])),
+            ( 3, HashSet::from([0..=0])),
+        ]));
+
+        /*   .
+         *  ...  .
+         * ....B...
+         *...S...S..
+         * .....B..
+         *  ...  .
+         *   .
+         */
+        fill_rows(&mut w, &Sensor{
+            position: (4,0),
+            closest_beacon: (3,-1),
+            radius: 2
+        }, -5, 5);
+        assert_eq!(w, HashMap::from([
+            (-3, HashSet::from([0..=0])),
+            (-2, HashSet::from([-1..=1,  4..=4])),
+            (-1, HashSet::from([-2..=5])),
+            ( 0, HashSet::from([-3..=6])),
+            ( 1, HashSet::from([-2..=5])),
+            ( 2, HashSet::from([-1..=1, 4..=4])),
+            ( 3, HashSet::from([0..=0])),
+        ]));
+    }
+
+    #[test]
+    fn test_possible_beacon_positions() {
+        let sensors = parse_sensors(sample());
+        let missing_beacons = possible_beacon_positions(&sensors, (0, 20), (0, 20));
+        assert_eq!(missing_beacons, vec![(14, 11)]);
+        assert_eq!(missing_beacons.iter().map(tuning_frequency).collect::<Vec<i32>>(), vec![56000011]);
     }
 }
